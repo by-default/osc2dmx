@@ -1,0 +1,12 @@
+[Unit]
+Description=mqtt2dmx
+After=network.target
+
+[Service]
+Type=simple
+Restart=on-failure
+User=pi
+ExecStart=/opt/mqtt2dmx/main.py
+
+[Install]
+WantedBy=multi-user.target
