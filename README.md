@@ -1,5 +1,5 @@
 # mqtt2dmx
 ```sh
 # Install deps
-pip install paho-mqtt numpy
+pip install paho-mqtt numpy pyserial
 ```
