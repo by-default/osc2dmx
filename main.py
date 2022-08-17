@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+
 import serial
 import time
-import numpy as np
-import paho.mqtt.client as mqtt
 import threading
 import settings
+
+from pythonosc import dispatcher
+from pythonosc import osc_server
 
 channel = [0] * 513 
 dmxd = {0: channel}
@@ -16,20 +18,12 @@ class PyDMX:
         self.channel_num = Cnumber
         try:
             self.ser = serial.Serial(COM,baudrate=Brate,bytesize=Bsize,stopbits=StopB)
-            self.data = np.zeros([self.channel_num+1],dtype='uint8')
+            self.data = [0] * (self.channel_num+1)
             self.data[0] = 0 # StartCode
-            self.sleepms = 50.0
+            self.sleepms = 1.0
             self.breakus = 176.0
             self.MABus = 16.0
-            # save filename
-            self.preserve_data_name = preserve_data_name
-            self.use_prev_data = use_prev_data
-            # load preserved DMX data
-            if use_prev_data:
-                try:
-                    self.load_data()
-                except:
-                    print("Something is wrong. please check data format!")
+
         except serial.SerialException as err:
             print("Serial error: {0}".format(err))
             return
@@ -60,14 +54,8 @@ class PyDMX:
         
 
     def sendzero(self):
-        self.data = np.zeros([self.channel_num+1],dtype='uint8')
-        self.send()
-
-    def load_data(self):
-        self.data = np.loadtxt(self.preserve_data_name,dtype='int')        
-
-    def preserve_data(self):
-        np.savetxt(self.preserve_data_name,self.data)        
+        self.data = [0] * (self.channel_num+1)
+        self.send()        
 
     def __del__(self):
         print('Close serial server!')
@@ -84,49 +72,44 @@ def thread_function(): #Write to serial loop
         dmx.set_data(dmxd.get(0))
         dmx.send()
 
-# The callback for when the client receives a CONNACK response from the server.
-def on_connect(client, userdata, flags, rc):
-    client.username_pw_set(settings.mqtt_login, settings.mqtt_pass)
-    print("Connected with result code "+str(rc))
 
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
-    client.subscribe("bus/dmx/#")
-    
-
-# The callback for when a PUBLISH message is received from the server.
-def on_message(client, userdata, msg):
+def osc_handler(addr, *args):
     global dmxd
     try:
-        universe = int(msg.topic.split("/")[-2])
-        channel_num = int(msg.topic.split("/")[-1])
+        universe = int(addr.split("/")[-2])
+        channel_num = int(addr.split("/")[-1])
+        value = int(args[0])
         channel.pop(channel_num)
-        channel.insert(channel_num, int(msg.payload))
+        channel.insert(channel_num, value)
         dmxd[universe] = channel
+
+        print(f"universe {universe} channel {channel_num} = {value}")
     except ValueError:
         dmxd = {0: 0}
-        print("Please, use bus/dmx/#/# format, reset channel")
+        print("Please, use /dmx/#/# format, reset channel")
         return
-    
-    print(msg.topic+" "+str(msg.payload))
+
+
 
 def main():
-    client = mqtt.Client()
-    client.on_connect = on_connect
-    client.on_message = on_message
-    if settings.ca_certs:
-        client.tls_set(ca_certs=settings.ca_certs)
-
-    client.connect(settings.mqtt_ip, settings.mqtt_port, 60)
+    
     x = threading.Thread(target=thread_function)
     x.start()
     print("Serial write DMX loop begin")
-    client.loop_forever()
+
+    disp = dispatcher.Dispatcher()
+    disp.map("/dmx/*", osc_handler)
+    server = osc_server.ThreadingOSCUDPServer(
+        (settings.host, settings.port),
+        disp
+    )
+    print(f"Serving on {server.server_address}")
+    server.serve_forever()
+
     del dmx
+
 if __name__ == '__main__':
-    while 1:
-        try: 
-            main()
-        except:
-            print("Please, debug the program. Check mqtt and serial ports. Comment this TRY.")
-            time.sleep(1)
+    try: 
+        main()
+    except Exception as e:
+        print(e)

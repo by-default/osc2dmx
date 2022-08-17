@@ -1,6 +1,3 @@
-mqtt_ip="127.0.0.1" # MQTT broker host
-mqtt_port=8883   # MQTT port (1883 for plain, 8883 for MQTTS)
-mqtt_login="foo" # MQTT broker username
-mqtt_pass="bar"  # MQTT broker password
+host="127.0.0.1" # OSC host
+port=9512   # OSC port
 serial="/dev/ttyUSB0" # Path to DMX tty device
-ca_certs = "root.ca" # Path to MQTT broker CA or None
